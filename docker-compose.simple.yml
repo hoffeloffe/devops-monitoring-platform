@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: devops-automation-db
+    environment:
+      POSTGRES_DB: devops_automation
+      POSTGRES_USER: devops_user
+      POSTGRES_PASSWORD: devops_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - devops-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devops_user -d devops_automation"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: devops-automation-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - devops-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Main Application (Simple Version)
+  devops-automation-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: devops-automation-app
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://devops_user:devops_password@postgres:5432/devops_automation
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=development
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock  # For Docker monitoring
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - devops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  devops-network:
+    driver: bridge
