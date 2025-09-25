@@ -6,6 +6,12 @@ A real-time monitoring dashboard for infrastructure and system health. Built wit
 ![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)
 
+## Screenshot
+
+![Dashboard Screenshot](screenshot.png)
+
+*Real-time monitoring dashboard showing system metrics and health status*
+
 ## Features
 
 - **Real-time Dashboard** - Live system metrics and health status
