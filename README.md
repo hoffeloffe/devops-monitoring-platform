@@ -8,7 +8,7 @@ A real-time monitoring dashboard for infrastructure and system health. Built wit
 
 ## Screenshot
 
-![Dashboard Screenshot](screenshot.png)
+![Dashboard Screenshot](Screenshot.png)
 
 *Real-time monitoring dashboard showing system metrics and health status*
 
