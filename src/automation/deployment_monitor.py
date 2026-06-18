@@ -5,9 +5,7 @@ This module demonstrates RPA skills by automating deployment monitoring tasks
 that would typically require manual checking across multiple platforms.
 """
 
-import requests
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional
 from loguru import logger
 from kubernetes import client, config
@@ -45,7 +43,7 @@ class DeploymentMonitor:
             try:
                 config.load_incluster_config()
                 logger.info("Loaded in-cluster Kubernetes configuration")
-            except:
+            except config.ConfigException:
                 config.load_kube_config()
                 logger.info("Loaded local Kubernetes configuration")
                 

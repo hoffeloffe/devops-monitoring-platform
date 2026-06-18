@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy Python source code
 COPY src/ ./src/
 
-# Copy the demo HTML as a simple frontend
-COPY demo.html ./static/index.html
+# Copy the dashboard HTML as a simple frontend
+COPY dashboard.html ./static/index.html
 
 # Create logs directory
 RUN mkdir -p logs

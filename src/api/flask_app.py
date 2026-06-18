@@ -273,7 +273,7 @@ class DevOpsAPI:
                 'uptime_seconds': int(uptime.total_seconds()),
                 'uptime_human': str(uptime).split('.')[0]  # Remove microseconds
             }
-        except:
+        except Exception:
             return {
                 'boot_time': None,
                 'uptime_seconds': 0,

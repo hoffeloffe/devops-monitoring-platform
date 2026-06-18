@@ -6,12 +6,10 @@ by automating cloud cost analysis and optimization recommendations.
 """
 
 import boto3
-import requests
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List
 from loguru import logger
 from dataclasses import dataclass
-import json
 
 @dataclass
 class CostRecommendation:

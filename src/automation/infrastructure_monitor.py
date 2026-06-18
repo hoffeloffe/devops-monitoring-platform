@@ -8,7 +8,7 @@ monitoring tasks across multiple platforms and services.
 import psutil
 import requests
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional
 from loguru import logger
 from dataclasses import dataclass
@@ -69,7 +69,7 @@ class InfrastructureMonitor:
         try:
             try:
                 config.load_incluster_config()
-            except:
+            except config.ConfigException:
                 config.load_kube_config()
             self.k8s_core_v1 = client.CoreV1Api()
             self.k8s_metrics = client.CustomObjectsApi()
@@ -250,7 +250,7 @@ class InfrastructureMonitor:
                 
                 # Get node roles from labels
                 if node.metadata.labels:
-                    for label, value in node.metadata.labels.items():
+                    for label in node.metadata.labels:
                         if 'node-role.kubernetes.io' in label:
                             role = label.split('/')[-1]
                             node_info['roles'].append(role)

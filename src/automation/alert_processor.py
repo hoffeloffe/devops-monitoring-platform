@@ -5,9 +5,7 @@ This module demonstrates advanced RPA skills by automating alert processing,
 deduplication, and intelligent routing based on severity and context.
 """
 
-import smtplib
 import requests
-import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from loguru import logger

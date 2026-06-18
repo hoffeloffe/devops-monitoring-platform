@@ -5,10 +5,8 @@ This is the core automation engine that orchestrates all DevOps automation tasks
 Perfect for demonstrating RPA and DevOps skills to potential employers.
 """
 
-import os
 import time
 import schedule
-from datetime import datetime
 from loguru import logger
 from dotenv import load_dotenv
 
