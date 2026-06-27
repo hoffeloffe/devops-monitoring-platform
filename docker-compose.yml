@@ -6,9 +6,9 @@ services:
     image: postgres:15-alpine
     container_name: devops-automation-db
     environment:
-      POSTGRES_DB: devops_automation
-      POSTGRES_USER: devops_user
-      POSTGRES_PASSWORD: devops_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -17,7 +17,7 @@ services:
     networks:
       - devops-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devops_user -d devops_automation"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -38,19 +38,28 @@ services:
       timeout: 10s
       retries: 3
 
-  # Main Application (Simple Version)
+  # Main Application
   devops-automation-hub:
     build:
       context: .
-      dockerfile: Dockerfile.simple
+      dockerfile: Dockerfile
     container_name: devops-automation-app
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://devops_user:devops_password@postgres:5432/devops_automation
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379/0
-      - FLASK_ENV=development
+      - FLASK_ENV=production
       - PYTHONPATH=/app/src
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - PAGERDUTY_ROUTING_KEY=${PAGERDUTY_ROUTING_KEY}
+      - SMTP_SERVER=${SMTP_SERVER}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - ALERT_EMAIL_SENDER=${ALERT_EMAIL_SENDER}
+      - ALERT_EMAIL_RECIPIENTS=${ALERT_EMAIL_RECIPIENTS}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
     volumes:
       - ./logs:/app/logs
       - /var/run/docker.sock:/var/run/docker.sock  # For Docker monitoring

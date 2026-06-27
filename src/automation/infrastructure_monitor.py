@@ -61,25 +61,25 @@ class InfrastructureMonitor:
         try:
             self.docker_client = docker.from_env()
             logger.info("Docker client initialized successfully")
-        except Exception as e:
-            logger.warning(f"Could not initialize Docker client: {e}")
+        except Exception:
+            logger.exception("Could not initialize Docker client")
             self.docker_client = None
-        
+
         # Initialize Kubernetes client
         try:
             try:
                 config.load_incluster_config()
-            except:
+            except Exception:
                 config.load_kube_config()
             self.k8s_core_v1 = client.CoreV1Api()
             self.k8s_metrics = client.CustomObjectsApi()
             logger.info("Kubernetes client initialized successfully")
-        except Exception as e:
-            logger.warning(f"Could not initialize Kubernetes client: {e}")
+        except Exception:
+            logger.exception("Could not initialize Kubernetes client")
             self.k8s_core_v1 = None
             self.k8s_metrics = None
     
-    def collect_system_metrics(self) -> SystemMetrics:
+    def collect_system_metrics(self) -> Optional[SystemMetrics]:
         """
         Collect comprehensive system metrics.
         
@@ -136,9 +136,9 @@ class InfrastructureMonitor:
             logger.info(f"System metrics collected - CPU: {cpu_percent}%, Memory: {memory_percent}%, Disk: {disk_percent}%")
             
             return metrics
-            
-        except Exception as e:
-            logger.error(f"Error collecting system metrics: {e}")
+
+        except Exception:
+            logger.exception("Error collecting system metrics")
             return None
     
     def monitor_docker_containers(self) -> List[Dict]:
@@ -192,18 +192,18 @@ class InfrastructureMonitor:
                     containers_status.append(container_info)
                     
                 except Exception as e:
-                    logger.warning(f"Error getting stats for container {container.name}: {e}")
+                    logger.exception(f"Error getting stats for container {container.name}")
                     containers_status.append({
                         'name': container.name,
                         'id': container.short_id,
                         'status': container.status,
                         'error': str(e)
                     })
-            
+
             logger.info(f"Monitored {len(containers_status)} Docker containers")
-            
-        except Exception as e:
-            logger.error(f"Error monitoring Docker containers: {e}")
+
+        except Exception:
+            logger.exception("Error monitoring Docker containers")
         
         return containers_status
     
@@ -264,9 +264,9 @@ class InfrastructureMonitor:
                 nodes_status.append(node_info)
             
             logger.info(f"Monitored {len(nodes_status)} Kubernetes nodes")
-            
-        except Exception as e:
-            logger.error(f"Error monitoring Kubernetes nodes: {e}")
+
+        except Exception:
+            logger.exception("Error monitoring Kubernetes nodes")
         
         return nodes_status
     
