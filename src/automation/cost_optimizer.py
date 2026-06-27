@@ -61,8 +61,8 @@ class CostOptimizer:
             self.aws_ec2_client = boto3.client('ec2')
             self.aws_cloudwatch = boto3.client('cloudwatch')
             logger.info("AWS clients initialized successfully")
-        except Exception as e:
-            logger.warning(f"Could not initialize AWS clients: {e}")
+        except Exception:
+            logger.exception("Could not initialize AWS clients")
             self.aws_ce_client = None
             self.aws_ec2_client = None
             self.aws_cloudwatch = None
@@ -74,8 +74,8 @@ class CostOptimizer:
             # For demo purposes, we'll use placeholder
             self.azure_client = None
             logger.info("Azure client initialization - placeholder")
-        except Exception as e:
-            logger.warning(f"Could not initialize Azure client: {e}")
+        except Exception:
+            logger.exception("Could not initialize Azure client")
             self.azure_client = None
     
     def _load_optimization_rules(self) -> Dict:
@@ -145,8 +145,8 @@ class CostOptimizer:
             logger.info(f"AWS cost analysis completed. Total monthly cost: ${total_cost:.2f}")
             return analysis
             
-        except Exception as e:
-            logger.error(f"Error analyzing AWS costs: {e}")
+        except Exception:
+            logger.exception("Error analyzing AWS costs")
             return self._generate_mock_aws_analysis()
     
     def _generate_mock_aws_analysis(self) -> Dict:

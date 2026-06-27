@@ -46,12 +46,12 @@ class DeploymentMonitor:
             except config.ConfigException:
                 config.load_kube_config()
                 logger.info("Loaded local Kubernetes configuration")
-                
+
             self.k8s_apps_v1 = client.AppsV1Api()
             self.k8s_core_v1 = client.CoreV1Api()
-            
-        except Exception as e:
-            logger.warning(f"Could not initialize Kubernetes client: {e}")
+
+        except Exception:
+            logger.exception("Could not initialize Kubernetes client")
             self.k8s_apps_v1 = None
             self.k8s_core_v1 = None
     
@@ -113,8 +113,8 @@ class DeploymentMonitor:
             
             logger.info(f"Checked {len(deployments)} deployments across {len(namespaces.items)} namespaces")
             
-        except Exception as e:
-            logger.error(f"Error checking Kubernetes deployments: {e}")
+        except Exception:
+            logger.exception("Error checking Kubernetes deployments")
         
         return deployments
     

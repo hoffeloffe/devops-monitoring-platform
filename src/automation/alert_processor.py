@@ -1,10 +1,10 @@
 """
 Alert Processor - Intelligent Alert Management and Routing
-
-This module demonstrates advanced RPA skills by automating alert processing,
-deduplication, and intelligent routing based on severity and context.
 """
 
+import collections
+import os
+import smtplib
 import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -13,6 +13,10 @@ from dataclasses import dataclass
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import hashlib
+
+# Max size of in-memory stores
+_ALERT_HISTORY_MAX = 10000
+_ACTIVE_ALERT_TTL = timedelta(hours=24)
 
 @dataclass
 class Alert:
@@ -37,42 +41,38 @@ class NotificationChannel:
     enabled: bool = True
 
 class AlertProcessor:
-    """
-    Intelligent alert processing and notification system.
-    
-    This class demonstrates enterprise automation capabilities:
-    - Alert deduplication and correlation
-    - Intelligent routing based on severity and context
-    - Multi-channel notifications (email, Slack, webhooks)
-    - Alert escalation and acknowledgment tracking
-    - Integration with monitoring systems
-    """
-    
+    """Intelligent alert processing and notification system."""
+
     def __init__(self):
-        self.active_alerts = {}
-        self.alert_history = []
+        self.active_alerts: Dict[str, Alert] = {}
+        self.alert_history: collections.deque = collections.deque(maxlen=_ALERT_HISTORY_MAX)
         self.notification_channels = self._setup_notification_channels()
         self.routing_rules = self._setup_routing_rules()
         self.deduplication_window = timedelta(minutes=5)
-        
+
     def _setup_notification_channels(self) -> List[NotificationChannel]:
-        """Setup available notification channels"""
+        """Setup available notification channels from environment configuration"""
+        recipients_env = os.environ.get("ALERT_EMAIL_RECIPIENTS", "")
+        recipients = [r.strip() for r in recipients_env.split(",") if r.strip()]
+
         return [
             NotificationChannel(
                 name="email_ops",
                 type="email",
                 config={
-                    "smtp_server": "smtp.gmail.com",
-                    "smtp_port": 587,
-                    "recipients": ["ops-team@company.com", "devops@company.com"],
-                    "sender": "alerts@company.com"
+                    "smtp_server": os.environ.get("SMTP_SERVER", ""),
+                    "smtp_port": int(os.environ.get("SMTP_PORT", "587")),
+                    "smtp_username": os.environ.get("SMTP_USERNAME", ""),
+                    "smtp_password": os.environ.get("SMTP_PASSWORD", ""),
+                    "recipients": recipients,
+                    "sender": os.environ.get("ALERT_EMAIL_SENDER", "")
                 }
             ),
             NotificationChannel(
                 name="slack_critical",
                 type="slack",
                 config={
-                    "webhook_url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+                    "webhook_url": os.environ.get("SLACK_WEBHOOK_URL", ""),
                     "channel": "#critical-alerts",
                     "username": "DevOps Bot"
                 }
@@ -82,11 +82,11 @@ class AlertProcessor:
                 type="webhook",
                 config={
                     "url": "https://events.pagerduty.com/v2/enqueue",
-                    "routing_key": "YOUR_PAGERDUTY_KEY"
+                    "routing_key": os.environ.get("PAGERDUTY_ROUTING_KEY", "")
                 }
             )
         ]
-    
+
     def _setup_routing_rules(self) -> List[Dict]:
         """Setup alert routing rules based on severity and source"""
         return [
@@ -115,39 +115,40 @@ class AlertProcessor:
                 "escalation_time": timedelta(minutes=30)
             }
         ]
-    
+
     def generate_alert_id(self, alert_data: Dict) -> str:
         """Generate unique alert ID based on content for deduplication"""
         content = f"{alert_data.get('title', '')}{alert_data.get('source', '')}{alert_data.get('description', '')}"
         return hashlib.md5(content.encode()).hexdigest()[:12]
-    
+
+    def _evict_stale_active_alerts(self) -> None:
+        """Evict active alerts older than the TTL to bound memory usage."""
+        cutoff = datetime.now() - _ACTIVE_ALERT_TTL
+        stale_ids = [aid for aid, a in self.active_alerts.items() if a.timestamp < cutoff]
+        for aid in stale_ids:
+            del self.active_alerts[aid]
+        if stale_ids:
+            logger.info(f"Evicted {len(stale_ids)} stale active alerts")
+
     def deduplicate_alert(self, new_alert: Alert) -> bool:
-        """
-        Check if alert is a duplicate within the deduplication window.
-        
-        Demonstrates intelligent alert processing and noise reduction.
-        """
+        """Check if alert is a duplicate within the deduplication window."""
         current_time = datetime.now()
-        
-        # Check active alerts for duplicates
+
         for alert_id, existing_alert in self.active_alerts.items():
-            if (existing_alert.title == new_alert.title and 
+            if (existing_alert.title == new_alert.title and
                 existing_alert.source == new_alert.source and
                 current_time - existing_alert.timestamp < self.deduplication_window):
-                
+
                 logger.info(f"Alert deduplicated: {new_alert.title} (original: {alert_id})")
                 return True
-        
+
         return False
-    
+
     def process_alert(self, alert_data: Dict) -> Optional[Alert]:
-        """
-        Process incoming alert and apply business logic.
-        
-        This demonstrates intelligent alert processing and automation.
-        """
+        """Process incoming alert and apply business logic."""
         try:
-            # Create alert object
+            self._evict_stale_active_alerts()
+
             alert = Alert(
                 id=self.generate_alert_id(alert_data),
                 title=alert_data.get('title', 'Unknown Alert'),
@@ -158,130 +159,113 @@ class AlertProcessor:
                 tags=alert_data.get('tags', []),
                 metadata=alert_data.get('metadata', {})
             )
-            
-            # Check for duplicates
+
             if self.deduplicate_alert(alert):
                 return None
-            
-            # Enrich alert with additional context
+
             alert = self._enrich_alert(alert)
-            
-            # Apply severity-based processing
             alert = self._apply_severity_rules(alert)
-            
-            # Store alert
+
             self.active_alerts[alert.id] = alert
             self.alert_history.append(alert)
-            
+
             logger.info(f"Processed new alert: {alert.title} (severity: {alert.severity})")
-            
+
             return alert
-            
-        except Exception as e:
-            logger.error(f"Error processing alert: {e}")
+
+        except Exception:
+            logger.exception("Error processing alert")
             return None
-    
+
     def _enrich_alert(self, alert: Alert) -> Alert:
-        """
-        Enrich alert with additional context and metadata.
-        
-        Demonstrates data enrichment and contextual analysis.
-        """
-        # Add timestamp-based tags
+        """Enrich alert with additional context and metadata."""
         hour = alert.timestamp.hour
         if 0 <= hour < 6:
             alert.tags.append("night_hours")
         elif 9 <= hour < 17:
             alert.tags.append("business_hours")
-        
-        # Add source-based enrichment
+
         if alert.source == "kubernetes":
             alert.tags.append("container_platform")
             if "pod" in alert.description.lower():
                 alert.tags.append("pod_issue")
             elif "node" in alert.description.lower():
                 alert.tags.append("node_issue")
-        
+
         elif alert.source == "aws":
             alert.tags.append("cloud_platform")
             if "ec2" in alert.description.lower():
                 alert.tags.append("compute_issue")
             elif "rds" in alert.description.lower():
                 alert.tags.append("database_issue")
-        
-        # Add severity-based metadata
+
         if alert.severity == "critical":
             alert.metadata["requires_immediate_attention"] = True
             alert.metadata["max_response_time"] = "15 minutes"
         elif alert.severity == "warning":
             alert.metadata["requires_attention"] = True
             alert.metadata["max_response_time"] = "1 hour"
-        
+
         return alert
-    
+
     def _apply_severity_rules(self, alert: Alert) -> Alert:
-        """
-        Apply business rules based on alert severity and context.
-        
-        Demonstrates rule-based automation and decision making.
-        """
-        # Auto-escalate certain types of alerts
+        """Apply business rules based on alert severity and context."""
         if any(keyword in alert.description.lower() for keyword in ["down", "failed", "error", "timeout"]):
             if alert.severity == "warning":
                 alert.severity = "critical"
                 alert.tags.append("auto_escalated")
                 logger.info(f"Auto-escalated alert {alert.id} to critical")
-        
-        # Auto-assign based on source
+
         if alert.source == "kubernetes":
             alert.assigned_to = "k8s_team"
         elif alert.source == "aws":
             alert.assigned_to = "cloud_team"
         elif alert.source == "database":
             alert.assigned_to = "dba_team"
-        
+
         return alert
-    
+
     def route_alert(self, alert: Alert) -> List[str]:
-        """
-        Route alert to appropriate notification channels based on rules.
-        
-        Demonstrates intelligent routing and decision automation.
-        """
+        """Route alert to appropriate notification channels based on rules."""
         matching_channels = []
-        
+
         for rule in self.routing_rules:
             rule_matches = True
-            
-            # Check if alert matches rule conditions
+
             for condition_key, condition_value in rule["conditions"].items():
                 if getattr(alert, condition_key, None) != condition_value:
                     rule_matches = False
                     break
-            
+
             if rule_matches:
                 matching_channels.extend(rule["channels"])
                 logger.info(f"Alert {alert.id} matched routing rule: {rule['name']}")
-        
-        # Remove duplicates while preserving order
+
         unique_channels = list(dict.fromkeys(matching_channels))
-        
+
         return unique_channels
-    
+
     def send_email_notification(self, alert: Alert, channel_config: Dict) -> bool:
-        """
-        Send email notification for alert.
-        
-        Demonstrates email automation and notification systems.
-        """
+        """Send email notification for alert via SMTP."""
+        smtp_server = channel_config.get('smtp_server')
+        smtp_port = channel_config.get('smtp_port', 587)
+        smtp_username = channel_config.get('smtp_username')
+        smtp_password = channel_config.get('smtp_password')
+        sender = channel_config.get('sender')
+        recipients = channel_config.get('recipients', [])
+
+        if not smtp_server or not sender or not recipients:
+            logger.warning(
+                f"Email channel not configured (server/sender/recipients missing); skipping alert {alert.id}"
+            )
+            return False
+
         try:
-            # Create email message
             msg = MIMEMultipart()
-            msg['From'] = channel_config.get('sender', 'alerts@company.com')
-            msg['To'] = ', '.join(channel_config.get('recipients', []))
+            msg['From'] = sender
+            msg['To'] = ', '.join(recipients)
             msg['Subject'] = f"[{alert.severity.upper()}] {alert.title}"
-            
-            # Create email body
+
             body = f"""
 Alert Details:
 --------------
@@ -301,32 +285,33 @@ Assigned To: {alert.assigned_to or 'Unassigned'}
 ---
 This is an automated alert from DevOps Automation Hub
             """
-            
+
             msg.attach(MIMEText(body, 'plain'))
-            
-            # Send email (in production, you'd use actual SMTP credentials)
+
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                if smtp_username and smtp_password:
+                    smtp.login(smtp_username, smtp_password)
+                smtp.sendmail(sender, recipients, msg.as_string())
+
             logger.info(f"Email notification sent for alert {alert.id}")
             return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send email notification: {e}")
+
+        except Exception:
+            logger.exception("Failed to send email notification")
             return False
-    
+
     def send_slack_notification(self, alert: Alert, channel_config: Dict) -> bool:
-        """
-        Send Slack notification for alert.
-        
-        Demonstrates webhook integration and chat platform automation.
-        """
+        """Send Slack notification for alert."""
         try:
-            # Determine color based on severity
             color_map = {
                 "critical": "#FF0000",
-                "warning": "#FFA500", 
+                "warning": "#FFA500",
                 "info": "#0000FF"
             }
-            
-            # Create Slack message payload
+
             payload = {
                 "channel": channel_config.get('channel', '#alerts'),
                 "username": channel_config.get('username', 'DevOps Bot'),
@@ -346,28 +331,25 @@ This is an automated alert from DevOps Automation Hub
                     }
                 ]
             }
-            
-            # Send to Slack (in production, you'd use actual webhook URL)
+
             webhook_url = channel_config.get('webhook_url')
-            if webhook_url and webhook_url != "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK":
-                response = requests.post(webhook_url, json=payload)
-                response.raise_for_status()
-            
+            if not webhook_url:
+                logger.warning(f"Slack webhook URL not configured; skipping alert {alert.id}")
+                return False
+
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+
             logger.info(f"Slack notification sent for alert {alert.id}")
             return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send Slack notification: {e}")
+
+        except Exception:
+            logger.exception("Failed to send Slack notification")
             return False
-    
+
     def send_webhook_notification(self, alert: Alert, channel_config: Dict) -> bool:
-        """
-        Send webhook notification for alert.
-        
-        Demonstrates API integration and external system communication.
-        """
+        """Send webhook notification for alert."""
         try:
-            # Create webhook payload
             payload = {
                 "alert_id": alert.id,
                 "title": alert.title,
@@ -379,29 +361,31 @@ This is an automated alert from DevOps Automation Hub
                 "metadata": alert.metadata,
                 "status": alert.status
             }
-            
-            # Send webhook (in production, you'd use actual webhook URL)
+
             webhook_url = channel_config.get('url')
-            if webhook_url and not webhook_url.startswith('https://events.pagerduty.com'):
-                response = requests.post(webhook_url, json=payload, timeout=10)
-                response.raise_for_status()
-            
+            routing_key = channel_config.get('routing_key')
+
+            if not webhook_url:
+                logger.warning(f"Webhook URL not configured; skipping alert {alert.id}")
+                return False
+
+            if routing_key:
+                payload["routing_key"] = routing_key
+
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+
             logger.info(f"Webhook notification sent for alert {alert.id}")
             return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send webhook notification: {e}")
+
+        except Exception:
+            logger.exception("Failed to send webhook notification")
             return False
-    
+
     def notify_alert(self, alert: Alert) -> Dict:
-        """
-        Send notifications for alert through appropriate channels.
-        
-        This orchestrates the notification process across multiple channels.
-        """
-        # Get routing channels for this alert
+        """Send notifications for alert through appropriate channels."""
         target_channels = self.route_alert(alert)
-        
+
         notification_results = {
             "alert_id": alert.id,
             "channels_attempted": len(target_channels),
@@ -409,11 +393,10 @@ This is an automated alert from DevOps Automation Hub
             "failed_notifications": 0,
             "results": []
         }
-        
+
         for channel_name in target_channels:
-            # Find channel configuration
             channel = next((ch for ch in self.notification_channels if ch.name == channel_name), None)
-            
+
             if not channel or not channel.enabled:
                 notification_results["results"].append({
                     "channel": channel_name,
@@ -421,8 +404,7 @@ This is an automated alert from DevOps Automation Hub
                     "reason": "Channel not found or disabled"
                 })
                 continue
-            
-            # Send notification based on channel type
+
             success = False
             if channel.type == "email":
                 success = self.send_email_notification(alert, channel.config)
@@ -430,8 +412,7 @@ This is an automated alert from DevOps Automation Hub
                 success = self.send_slack_notification(alert, channel.config)
             elif channel.type == "webhook":
                 success = self.send_webhook_notification(alert, channel.config)
-            
-            # Record result
+
             if success:
                 notification_results["successful_notifications"] += 1
                 notification_results["results"].append({
@@ -446,24 +427,13 @@ This is an automated alert from DevOps Automation Hub
                     "status": "failed",
                     "type": channel.type
                 })
-        
+
         logger.info(f"Notifications sent for alert {alert.id}: {notification_results['successful_notifications']} successful, {notification_results['failed_notifications']} failed")
-        
+
         return notification_results
-    
+
     def process_pending_alerts(self) -> int:
-        """
-        Process any pending alerts and send notifications.
-        
-        This is the main method called by the automation scheduler.
-        """
-        # In a real implementation, this would:
-        # 1. Check for new alerts from monitoring systems
-        # 2. Process each alert through the pipeline
-        # 3. Send notifications
-        # 4. Update alert status
-        
-        # For demo purposes, we'll create some sample alerts
+        """Process any pending alerts and send notifications."""
         sample_alerts = [
             {
                 "title": "High CPU Usage on Production Server",
@@ -482,33 +452,31 @@ This is an automated alert from DevOps Automation Hub
                 "metadata": {"namespace": "production", "pod": "api-service-7d4b8c9f-xyz"}
             }
         ]
-        
+
         processed_count = 0
-        
+
         for alert_data in sample_alerts:
             alert = self.process_alert(alert_data)
             if alert:
                 self.notify_alert(alert)
                 processed_count += 1
-        
+
         logger.info(f"Processed {processed_count} alerts")
         return processed_count
-    
+
     def get_alert_summary(self) -> Dict:
         """Get summary of current alert status"""
         current_time = datetime.now()
-        
-        # Count alerts by severity
+
         severity_counts = {"critical": 0, "warning": 0, "info": 0}
         for alert in self.active_alerts.values():
             severity_counts[alert.severity] = severity_counts.get(alert.severity, 0) + 1
-        
-        # Count recent alerts (last 24 hours)
+
         recent_alerts = [
-            alert for alert in self.alert_history 
+            alert for alert in self.alert_history
             if current_time - alert.timestamp < timedelta(hours=24)
         ]
-        
+
         return {
             "active_alerts": len(self.active_alerts),
             "severity_breakdown": severity_counts,

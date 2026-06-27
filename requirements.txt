@@ -1,5 +1,4 @@
 # Core automation dependencies
-selenium==4.15.0
 requests==2.31.0
 schedule==1.2.0
 python-dotenv==1.0.0
@@ -12,10 +11,6 @@ boto3==1.29.0  # AWS SDK
 azure-mgmt-compute==30.0.0  # Azure SDK
 prometheus-client==0.18.0
 docker==6.1.3
-
-# Data processing
-pandas==2.1.0
-numpy==1.24.3
 
 # Web framework (for API endpoints)
 flask==2.3.3

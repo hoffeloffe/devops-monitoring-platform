@@ -1,5 +1,5 @@
 # Simple Docker build for DevOps Automation Hub
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # Set working directory
 WORKDIR /app
@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy Python source code
 COPY src/ ./src/
 
-# Copy the dashboard HTML as a simple frontend
+# Copy the dashboard HTML as the frontend
 COPY dashboard.html ./static/index.html
 
 # Create logs directory
@@ -38,7 +38,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Set environment variables
 ENV PYTHONPATH=/app/src
-ENV FLASK_ENV=development
+ENV FLASK_ENV=production
 
 # Start the application
 CMD ["python", "src/main.py"]
