@@ -1,19 +1,37 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
 jobs:
-  test:
+  lint:
+    name: Ruff lint & compile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - run: pip install -r requirements.txt
-      - run: pip install ruff
-      - run: ruff check .
-      - run: python -m py_compile src/main.py
-      - run: python -m py_compile src/api/flask_app.py
-      - run: python -m py_compile src/automation/alert_processor.py
-      - run: python -m py_compile src/automation/cost_optimizer.py
-      - run: python -m py_compile src/automation/deployment_monitor.py
-      - run: python -m py_compile src/automation/infrastructure_monitor.py
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff==0.6.9
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Byte-compile sources
+        run: python -m compileall src
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t devops-monitoring-platform:ci .
